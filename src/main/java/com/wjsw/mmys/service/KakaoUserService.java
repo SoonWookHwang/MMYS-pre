@@ -113,7 +113,7 @@ public class KakaoUserService {
 
         if (kakaoUser == null) {
             String kakaoEmail = kakaoUserInfo.getEmail();
-            User sameEmailUser = userRepository.findByEmail(kakaoEmail).orElse(null);
+            User sameEmailUser = userRepository.findByKakaoId(kakaoId).orElse(null);
             if (sameEmailUser != null) {
                 kakaoUser = sameEmailUser;
 
@@ -129,7 +129,7 @@ public class KakaoUserService {
 
                 UserRoleEnum role = UserRoleEnum.USER;
 
-                kakaoUser = new User(nickname, encodedPassword, role, kakaoId);
+                kakaoUser = new User(nickname, encodedPassword, email, role,kakaoId);
             }
             userRepository.save(kakaoUser);
         }

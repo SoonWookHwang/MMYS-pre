@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 
 // org.springframework.security.oauth2.jose.jws;
 //  io.jsonwebtoken;
@@ -37,7 +38,6 @@ public class JwtTokenProvider {
     @Value("${security.jwt.token.refresh-key}")
     private String refreshKey;
 
-
     private final UserDetailsService userDetailsService;
 
     // 객체 초기화, secretKey 를 Base64로 인코딩한다.
@@ -49,13 +49,13 @@ public class JwtTokenProvider {
     /*
     JWT Access 토큰 , Refresh 토큰 생성
      */
-    public TokenDto createToken(String userPk/*,List<String> roles*/) {
-//        claims.put("roles", roles);
-        Claims claims = Jwts.claims().setSubject(userPk); // JWT payload 에 저장되는 정보단위
+    public TokenDto createToken(String userPk, List<String> roles) {
+        Claims claims = Jwts.claims().setSubject(userPk);
+        claims.put("roles", roles);
         Date now = new Date();
         Date accessTokenExpiresIn = new Date(now.getTime() + ACCESS_TOKEN_EXPIRE_TIME);
-        log.info("만료시간= " +accessTokenExpiresIn.getTime());
-        log.info("현재시간= " +now.getTime());
+        log.info("만료시간= " + accessTokenExpiresIn.getTime());
+        log.info("현재시간= " + now.getTime());
 
         // Access Token 생성
         String accessToken = Jwts.builder()
@@ -64,7 +64,7 @@ public class JwtTokenProvider {
                 .setExpiration(accessTokenExpiresIn) // set Expire Time
                 .signWith(SignatureAlgorithm.HS256, secretKey) // 사용할 암호화 알고리즘과 signature 에 들어갈 secret 값 세팅
                 .compact();
-        log.info("토큰을 만들때 authentication객체의 이름= "+userPk);
+        log.info("토큰을 만들때 authentication객체의 이름= " + userPk);
 
         // Refresh Token 생성
         String refreshToken = Jwts.builder()

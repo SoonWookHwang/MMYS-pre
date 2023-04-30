@@ -8,7 +8,7 @@ import com.wjsw.mmys.model.User;
 import com.wjsw.mmys.model.UserRoleEnum;
 import com.wjsw.mmys.repository.UserRepository;
 import com.wjsw.mmys.security.UserDetailsImpl;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -27,49 +27,50 @@ import org.springframework.web.client.RestTemplate;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class KakaoUserService {
 
     private final PasswordEncoder passwordEncoder;
 
     private final UserRepository userRepository;
 
+
     @Value("${kakaosecretkey}")
     private String kakaoKey;
 
-    @Autowired
-    public KakaoUserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-    }
-
     public void kakaoLogin(String code) throws JsonProcessingException {
-
         String accessToken = getAccessToken(code);
 
-        KakaoUserInfoDto kakaoUserInfo = getKakaoUserInfo(accessToken);
+        KakaoUserInfoDto kakaoUserInfoDto = getKakaoUserInfo(accessToken);
 
-        User kakaoUser = registerKakaoUser(kakaoUserInfo);
+        User kakaoUser = new User();
 
         forceLogin(kakaoUser);
     }
 
 
-    private String getAccessToken(String code) throws JsonProcessingException {
-
+    /**
+     * order1
+     * kakao endpoint로 post요청을해 json response 를 받아오는 메소드
+     */
+    public String getAccessToken(String code) throws JsonProcessingException {
         HttpHeaders headers = new HttpHeaders();
         headers.add("Content-type", "application/x-www-form-urlencoded;charset=utf-8");
 
         MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("grant_type", "authorization_code");
+        body.add("grant-type", "authorization_code");
         body.add("client_id", kakaoKey);
-        body.add("redirect_uri", "http://localhost:8080/user/kakao/callback");
+        body.add("redirect_uri", "http://localhost:8080/user/signup");
         body.add("code", code);
 
         HttpEntity<MultiValueMap<String, String>> kakaoTokenRequest =
                 new HttpEntity<>(body, headers);
+
         RestTemplate rt = new RestTemplate();
+
+
         ResponseEntity<String> response = rt.exchange(
-                "https://kauth.kakao.com/oauth/token",
+                "http://kauth.kakao.com/oauth/token",
                 HttpMethod.POST,
                 kakaoTokenRequest,
                 String.class
@@ -77,20 +78,25 @@ public class KakaoUserService {
 
         String responseBody = response.getBody();
         ObjectMapper objectMapper = new ObjectMapper();
+
         JsonNode jsonNode = objectMapper.readTree(responseBody);
         return jsonNode.get("access_token").asText();
+
     }
 
-
+    /**
+     *
+     */
     private KakaoUserInfoDto getKakaoUserInfo(String accessToken) throws JsonProcessingException {
         HttpHeaders headers = new HttpHeaders();
         headers.add("Authorization", "Bearer " + accessToken);
-        headers.add("Content-type", "application/x-www-form-urlencoded;charset=utf-8");
+        headers.add("Content-type", "/x-www-form-urlencoded;charset=utf-8");
 
         HttpEntity<MultiValueMap<String, String>> kakaoUserInfoRequest = new HttpEntity<>(headers);
+
         RestTemplate rt = new RestTemplate();
         ResponseEntity<String> response = rt.exchange(
-                "https://kapi.kakao.com/v2/user/me",
+                "http://kapi.kakao.com/ver/user/me",
                 HttpMethod.POST,
                 kakaoUserInfoRequest,
                 String.class
@@ -99,39 +105,38 @@ public class KakaoUserService {
         String responseBody = response.getBody();
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode jsonNode = objectMapper.readTree(responseBody);
-        Long id = jsonNode.get("id").asLong();
-        String nickname = jsonNode.get("properties").get("nickname").asText();
-        String email = jsonNode.get("kakao_account").get("email").asText();
 
-        System.out.println("카카오 사용자 정보: " + id + ", " + nickname + ", " + email);
+        Long id = jsonNode.get("id").asLong();
+        String nickname = jsonNode.get("properties").get("nicname").asText();
+        String email = jsonNode.get("kakao_account").asText();
+
         return new KakaoUserInfoDto(id, nickname, email);
     }
 
-    private User registerKakaoUser(KakaoUserInfoDto kakaoUserInfo) {
-        Long kakaoId = kakaoUserInfo.getId();
-        User kakaoUser = userRepository.findByKakaoId(kakaoId).orElse(null);
-
+    private User registerKakaoUserIfNeeded(KakaoUserInfoDto kakaoUserInfoDto) {
+        Long kakaoId = kakaoUserInfoDto.getId();
+        User kakaoUser = userRepository.findByKakaoId(kakaoId)
+                .orElse(null);
         if (kakaoUser == null) {
-            String kakaoEmail = kakaoUserInfo.getEmail();
-            User sameEmailUser = userRepository.findByKakaoId(kakaoId).orElse(null);
+            String kakaoEmail = kakaoUserInfoDto.getEmail();
+            User sameEmailUser = userRepository.findByEmail(kakaoEmail).orElse(null);
+
             if (sameEmailUser != null) {
                 kakaoUser = sameEmailUser;
-
                 kakaoUser.setKakaoId(kakaoId);
             } else {
-
-                String nickname = kakaoUserInfo.getNickname();
+                String nicname = kakaoUserInfoDto.getNickname();
 
                 String password = UUID.randomUUID().toString();
                 String encodedPassword = passwordEncoder.encode(password);
 
-                String email = kakaoUserInfo.getEmail();
+
+                String email = kakaoUserInfoDto.getEmail();
 
                 UserRoleEnum role = UserRoleEnum.USER;
 
-                kakaoUser = new User(nickname, encodedPassword, email, role,kakaoId);
+                kakaoUser = new User(nicname, encodedPassword, email, role, kakaoId);
             }
-            userRepository.save(kakaoUser);
         }
         return kakaoUser;
     }
